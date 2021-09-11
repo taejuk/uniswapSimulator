@@ -57,6 +57,9 @@ export class TickListDataProvider implements TickDataProvider {
             JSBI.BigInt(net)
           );
         }
+        if (JSBI.equal(this.ticks[idx].liquidityGross, ZERO)) {
+          this.ticks.splice(idx, 1);
+        }
       }
     });
   }

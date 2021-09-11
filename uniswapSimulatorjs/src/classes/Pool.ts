@@ -8,11 +8,12 @@ import {
   computePoolAddress,
   FACTORY_ADDRESS,
   FeeAmount,
+  FullMath,
   LiquidityMath,
   TickMath,
   TICK_SPACINGS,
 } from "@uniswap/v3-sdk";
-import { NEGATIVE_ONE, ONE, Q192, ZERO } from "./constants";
+import { NEGATIVE_ONE, ONE, Q128, Q192, ZERO } from "./constants";
 import { SwapMath } from "./swapMath";
 
 interface StepComputations {
@@ -25,6 +26,21 @@ interface StepComputations {
   feeAmount: JSBI;
 }
 
+interface TickWithFees {
+  index: number;
+  feeGrowth0XInside: JSBI;
+  feeGrowth1XInside: JSBI;
+}
+
+const mulDiv = (a: JSBI | undefined, b: JSBI, denominator: JSBI): JSBI => {
+  if (a == undefined) {
+    return ZERO;
+  }
+  const product = JSBI.multiply(a, b);
+  let result = JSBI.divide(product, denominator);
+  return result;
+};
+
 export class PoolSimulator {
   public readonly token0: Token;
   public readonly token1: Token;
@@ -33,7 +49,9 @@ export class PoolSimulator {
   public liquidity: JSBI;
   public tickCurrent: number;
   public tickDataProvider: TickDataProvider;
-
+  public tickWithFees: TickWithFees[];
+  public fee0XInside: JSBI;
+  public fee1XInside: JSBI;
   public static getAddress(
     tokenA: Token,
     tokenB: Token,
@@ -49,16 +67,6 @@ export class PoolSimulator {
     });
   }
 
-  /**
-   * Construct a pool
-   * @param tokenA One of the tokens in the pool
-   * @param tokenB The other token in the pool
-   * @param fee The fee in hundredths of a bips of the input amount of every swap that is collected by the pool
-   * @param sqrtRatioX96 The sqrt of the current ratio of amounts of token1 to token0
-   * @param liquidity The current value of in range liquidity
-   * @param tickCurrent The current tick of the pool
-   * @param ticks The current state of the pool ticks or a data provider that can return tick data
-   */
   public constructor(
     tokenA: Token,
     tokenB: Token,
@@ -66,7 +74,7 @@ export class PoolSimulator {
     sqrtRatioX96: BigintIsh,
     liquidity: BigintIsh,
     tickCurrent: number,
-    ticks: TickDataProvider | (Tick | TickConstructorArgs)[]
+    ticks: Tick[]
   ) {
     invariant(Number.isInteger(fee) && fee < 1_000_000, "FEE");
 
@@ -91,13 +99,28 @@ export class PoolSimulator {
     this.tickDataProvider = Array.isArray(ticks)
       ? new TickListDataProvider(ticks, TICK_SPACINGS[fee])
       : ticks;
+    this.tickWithFees = ticks.map((tick) => {
+      return {
+        index: tick.index,
+        feeGrowth0XInside: ZERO,
+        feeGrowth1XInside: ZERO,
+      };
+    });
+    this.tickWithFees = this.tickWithFees.sort(
+      (a: TickWithFees, b: TickWithFees) => (a.index > b.index ? 1 : -1)
+    );
+    this.fee0XInside = ZERO;
+    this.fee1XInside = ZERO;
   }
 
   public async add(tickLower: number, tickUpper: number, amount: BigintIsh) {
     this.tickDataProvider.updateTick(tickLower, amount, amount, false);
-    this.tickDataProvider.updateTick(tickUpper, amount, amount, false);
+    this.tickDataProvider.updateTick(tickUpper, amount, amount, true);
     if (this.tickCurrent >= tickLower && this.tickCurrent < tickUpper) {
-      this.liquidity = JSBI.ADD(this.liquidity, JSBI.BigInt(amount));
+      this.liquidity = LiquidityMath.addDelta(
+        this.liquidity,
+        JSBI.BigInt(amount)
+      );
     }
   }
   /**
@@ -130,6 +153,7 @@ export class PoolSimulator {
         JSBI.greaterThan(sqrtPriceLimitX96, TickMath.MIN_SQRT_RATIO),
         "RATIO_MIN"
       );
+
       invariant(
         JSBI.lessThan(sqrtPriceLimitX96, this.sqrtRatioX96),
         "RATIO_CURRENT"
@@ -139,6 +163,9 @@ export class PoolSimulator {
         JSBI.lessThan(sqrtPriceLimitX96, TickMath.MAX_SQRT_RATIO),
         "RATIO_MAX"
       );
+      if (JSBI.lessThan(sqrtPriceLimitX96, this.sqrtRatioX96)) {
+        console.log("haha2");
+      }
       invariant(
         JSBI.greaterThan(sqrtPriceLimitX96, this.sqrtRatioX96),
         "RATIO_CURRENT"
@@ -195,7 +222,36 @@ export class PoolSimulator {
           state.amountSpecifiedRemaining,
           this.fee
         );
-
+      // liquidity 당 fee 추가하기
+      if (JSBI.greaterThan(state.liquidity, ZERO)) {
+        if (zeroForOne) {
+          this.tickWithFees.forEach((tick, idx) => {
+            if (tick.index == state.tick - (state.tick % 60)) {
+              this.tickWithFees[idx].feeGrowth0XInside = JSBI.ADD(
+                this.tickWithFees[idx].feeGrowth0XInside,
+                mulDiv(step.feeAmount, Q128, state.liquidity)
+              );
+            }
+          });
+          this.fee0XInside = JSBI.ADD(
+            this.fee0XInside,
+            mulDiv(step.feeAmount, Q128, state.liquidity)
+          );
+        } else {
+          this.tickWithFees.forEach((tick, idx) => {
+            if (tick.index == state.tick - (state.tick % 60)) {
+              this.tickWithFees[idx].feeGrowth1XInside = JSBI.ADD(
+                this.tickWithFees[idx].feeGrowth1XInside,
+                mulDiv(step.feeAmount, Q128, state.liquidity)
+              );
+            }
+          });
+          this.fee1XInside = JSBI.ADD(
+            this.fee0XInside,
+            mulDiv(step.feeAmount, Q128, state.liquidity)
+          );
+        }
+      }
       if (exactInput) {
         state.amountSpecifiedRemaining = JSBI.subtract(
           state.amountSpecifiedRemaining,
@@ -239,6 +295,7 @@ export class PoolSimulator {
         state.tick = TickMath.getTickAtSqrtRatio(state.sqrtPriceX96);
       }
     }
+    //console.log(`liquidity: ${state.liquidity.toString()}`);
     this.sqrtRatioX96 = state.sqrtPriceX96;
     this.tickCurrent = state.tick;
     this.liquidity = state.liquidity;

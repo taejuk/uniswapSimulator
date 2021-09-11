@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "axios": "^0.21.1",
+    "ethers": "^5.4.6",
     "jsbi": "^3.2.1",
     "tiny-invariant": "^1.1.0"
   }

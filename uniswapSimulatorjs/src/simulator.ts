@@ -3,10 +3,10 @@ import { WETH9 } from "@uniswap/sdk-core";
 import { FeeAmount, TickMath } from "@uniswap/v3-sdk";
 import JSBI from "jsbi";
 import { NEGATIVE_ONE, ONE, ZERO } from "./classes/constants";
-
 import { PoolSimulator } from "./classes/Pool";
 import { web3 } from "./constant";
 import { getEvents, getPoolData, getTicksData } from "./getData";
+import { getEventsFromWeb3 } from "./getEventsFromWeb3";
 const weth = WETH9[1];
 const usdc = new Token(
   1,
@@ -35,8 +35,8 @@ async function testSwap(startBlockNumber: number, endBlockNumber: number) {
     pool.tickCurrent,
     ticks
   );
-  const events = await getEvents(startTimestamp, endTimestamp);
-
+  const events = await getEventsFromWeb3(startBlockNumber, endBlockNumber);
+  let swaps = 0;
   for (let event of events) {
     if (event.type == "mint" || event.type == "burn") {
       await simulator.add(event.tickLower, event.tickUpper, event.amount);
@@ -49,9 +49,7 @@ async function testSwap(startBlockNumber: number, endBlockNumber: number) {
           ? JSBI.add(TickMath.MIN_SQRT_RATIO, ONE)
           : JSBI.add(TickMath.MAX_SQRT_RATIO, NEGATIVE_ONE)
       );
-      console.log(event.tick - result.tickCurrent);
     }
   }
-  console.log(simulator.liquidity.toString());
 }
-testSwap(13038080, 13089290);
+// testSwap(13038080, 13080000);
