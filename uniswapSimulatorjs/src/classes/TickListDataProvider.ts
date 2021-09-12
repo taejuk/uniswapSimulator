@@ -3,7 +3,7 @@ import { Tick, TickConstructorArgs } from "./Tick";
 import { TickDataProvider } from "./TickDataProvider";
 import { BigintIsh } from "@uniswap/sdk-core";
 import JSBI from "jsbi";
-import { ZERO } from "./constants";
+import { NEGATIVE_ONE, ZERO } from "./constants";
 
 export class TickListDataProvider implements TickDataProvider {
   public ticks: Tick[];
@@ -40,8 +40,10 @@ export class TickListDataProvider implements TickDataProvider {
     gross: BigintIsh,
     upper: boolean
   ) {
+    let existed = false;
     this.ticks.forEach((tickInfo, idx) => {
       if (tickInfo.index == tick) {
+        existed = true;
         this.ticks[idx].liquidityGross = JSBI.ADD(
           JSBI.BigInt(gross),
           this.ticks[idx].liquidityGross
@@ -62,5 +64,16 @@ export class TickListDataProvider implements TickDataProvider {
         }
       }
     });
+    if (!existed) {
+      const data: Tick = {
+        index: tick,
+        liquidityGross: JSBI.BigInt(gross),
+        liquidityNet: upper
+          ? JSBI.multiply(NEGATIVE_ONE, JSBI.BigInt(net))
+          : JSBI.BigInt(net),
+      };
+      this.ticks.push(data);
+      this.ticks.sort((a: Tick, b: Tick) => (a.index > b.index ? 1 : -1));
+    }
   }
 }

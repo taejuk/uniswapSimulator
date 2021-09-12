@@ -216,14 +216,3 @@ export const getBurns = async (start: number, end: number) => {
   }
   return burns;
 };
-
-export const getEvents = async (start: number, end: number) => {
-  const swaps = await getSwaps(start, end);
-  const mints = await getMints(start, end);
-  const burns = await getBurns(start, end);
-  let events: any[] = [...swaps, ...mints, ...burns];
-  events = events.sort((a: Mint | Burn | Swap, b: Mint | Burn | Swap) =>
-    a.timestamp > b.timestamp ? 1 : -1
-  );
-  return events;
-};

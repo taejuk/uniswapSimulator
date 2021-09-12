@@ -2,11 +2,11 @@ import { Token } from "@uniswap/sdk-core";
 import { WETH9 } from "@uniswap/sdk-core";
 import { FeeAmount, TickMath } from "@uniswap/v3-sdk";
 import JSBI from "jsbi";
-import { NEGATIVE_ONE, ONE, ZERO } from "./classes/constants";
+import { NEGATIVE_ONE, ONE, Q128, ZERO } from "./classes/constants";
 import { PoolSimulator } from "./classes/Pool";
 import { web3 } from "./constant";
-import { getEvents, getPoolData, getTicksData } from "./getData";
-import { getEventsFromWeb3 } from "./getEventsFromWeb3";
+import { getPoolData, getTicksData } from "./getData";
+import { getEventsFromWeb3, Event } from "./getEventsFromWeb3";
 const weth = WETH9[1];
 const usdc = new Token(
   1,
@@ -19,11 +19,7 @@ const usdc = new Token(
 // swap이 정상적으로 작동하는지 확인.
 // blockNumber = 13038080
 
-async function testSwap(startBlockNumber: number, endBlockNumber: number) {
-  const startBlock = await web3.eth.getBlock(startBlockNumber);
-  const startTimestamp = Number(startBlock.timestamp);
-  const endBlock = await web3.eth.getBlock(endBlockNumber);
-  const endTimestamp = Number(endBlock.timestamp);
+export async function getSimulatior(startBlockNumber: number) {
   const pool = await getPoolData(startBlockNumber);
   const ticks = await getTicksData(startBlockNumber);
   const simulator = new PoolSimulator(
@@ -35,8 +31,23 @@ async function testSwap(startBlockNumber: number, endBlockNumber: number) {
     pool.tickCurrent,
     ticks
   );
+  return simulator;
+}
+
+export async function getEvents(
+  startBlockNumber: number,
+  endBlockNumber: number
+) {
   const events = await getEventsFromWeb3(startBlockNumber, endBlockNumber);
-  let swaps = 0;
+  return events;
+}
+
+export async function simulate(
+  startBlockNumber: number,
+  endBlockNumber: number,
+  events: Event[]
+) {
+  const simulator = await getSimulatior(startBlockNumber);
   for (let event of events) {
     if (event.type == "mint" || event.type == "burn") {
       await simulator.add(event.tickLower, event.tickUpper, event.amount);
@@ -51,5 +62,24 @@ async function testSwap(startBlockNumber: number, endBlockNumber: number) {
       );
     }
   }
+  return simulator;
 }
-// testSwap(13038080, 13080000);
+
+export async function simulate2(simulator2: PoolSimulator, events: Event[]) {
+  const simulator = simulator2;
+  for (let event of events) {
+    if (event.type == "mint" || event.type == "burn") {
+      await simulator.add(event.tickLower, event.tickUpper, event.amount);
+    } else if (event.type == "swap") {
+      const zeroForOne = JSBI.greaterThan(JSBI.BigInt(event.amount0), ZERO);
+      const result = await simulator.swap(
+        zeroForOne,
+        JSBI.BigInt(event.amount0),
+        zeroForOne
+          ? JSBI.add(TickMath.MIN_SQRT_RATIO, ONE)
+          : JSBI.add(TickMath.MAX_SQRT_RATIO, NEGATIVE_ONE)
+      );
+    }
+  }
+  return simulator;
+}
