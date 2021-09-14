@@ -358,18 +358,22 @@ const block = [
 
 const main = async () => {
   let result: any[] = [];
-  for (let i = 0; i < block.length - 2; i++) {
-    console.log(block[i], block[i + 2]);
-    const { max, maxTick } = await test2(block[i], block[i + 2]);
+  for (let i = 0; i < block.length - 7; i++) {
+    let start = new Date().getTime();
+    console.log(block[i], block[i + 7]);
+    const { max, maxTick } = await test2(block[i], block[i + 7]);
     const data = {
       max: max,
       maxTick: maxTick,
       start: block[i],
-      end: block[i + 2],
+      end: block[i + 7],
     };
     result.push(data);
     console.log(data);
+
+    let elapsed = new Date().getTime() - start;
+    console.log(elapsed);
   }
-  fs.writeFileSync("2dayResults.txt", JSON.stringify(result, undefined, 2));
+  fs.writeFileSync("7dayResults.txt", JSON.stringify(result, undefined, 2));
 };
 main();
