@@ -23,6 +23,7 @@ interface TokenResult {
   token0Amounts: BigintIsh;
   token1Amounts: BigintIsh;
 }
+// coin 종류 바뀌면 소수점 변경
 const x12 = JSBI.BigInt("1000000000000");
 const mintPosition = async (
   blockNumber: number,

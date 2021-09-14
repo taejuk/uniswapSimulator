@@ -4,10 +4,12 @@ import { FeeAmount, TickMath } from "@uniswap/v3-sdk";
 import JSBI from "jsbi";
 import { NEGATIVE_ONE, ONE, Q128, ZERO } from "./classes/constants";
 import { PoolSimulator } from "./classes/Pool";
-import { web3 } from "./constant";
 import { getPoolData, getTicksData } from "./getData";
 import { getEventsFromWeb3, Event } from "./getEventsFromWeb3";
 const weth = WETH9[1];
+// 하드코딩
+// uniswap interfaces constants token 정보 담겨있음
+
 const usdc = new Token(
   1,
   "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
